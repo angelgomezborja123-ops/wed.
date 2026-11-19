@@ -1,0 +1,1460 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Campo de Tulipanes al Atardecer - Crecimiento Progresivo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #16110e;
+      font-family: 'Inter', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html.overlay-mode, html.overlay-mode body { background: transparent !important; }
+    html.overlay-mode .vignette, html.overlay-mode .glass-hud, html.overlay-mode #showHudBtn { display: none !important; }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      cursor: pointer;
+    }
+
+    /* Viñeta sutil para realzar la profundidad fotográfica del campo */
+    .vignette {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(ellipse at 48% 46%, transparent 56%, rgba(12, 8, 6, 0.44) 100%);
+      z-index: 5;
+    }
+
+    /* Panel minimalista en la esquina inferior derecha */
+    .glass-hud {
+      background: rgba(24, 16, 20, 0.78);
+      border: 1px solid rgba(255, 194, 224, 0.25);
+      box-shadow: 0 8px 28px rgba(10, 5, 8, 0.45);
+      transition: opacity 0.35s ease, transform 0.35s ease;
+    }
+  </style>
+</head>
+<body>
+  <!-- Lienzo principal del campo abierto de tulipanes -->
+  <canvas id="tulipCanvas"></canvas>
+
+  <!-- Viñeta atmosférica -->
+  <div class="vignette"></div>
+
+  <!-- Controles discretos en la esquina inferior derecha -->
+  <div id="hud" class="glass-hud fixed bottom-4 right-4 z-10 px-3.5 py-2 rounded-full flex items-center gap-2 text-xs text-pink-100/90">
+    <span id="phaseBadge" class="px-2 py-0.5 rounded-full bg-white/10 border border-pink-200/25 text-[11px] font-medium text-pink-50 whitespace-nowrap">
+      Atardecer rosado
+    </span>
+    <span class="hidden lg:inline font-light text-pink-100/75">
+      Mueve el cursor: profundidad • Clic: brisa y polen dorado
+    </span>
+    <div class="hidden lg:block h-3.5 w-px bg-pink-200/20"></div>
+    <button id="breezeBtn" class="px-2.5 py-1 rounded-full bg-pink-500/25 hover:bg-pink-500/40 border border-pink-300/35 text-pink-50 transition cursor-pointer">
+      + Brisa
+    </button>
+    <button id="regrowBtn" class="px-2.5 py-1 rounded-full bg-amber-500/20 hover:bg-amber-500/35 border border-amber-200/35 text-amber-50 transition cursor-pointer">
+      Crecer de nuevo
+    </button>
+    <button id="hideHudBtn" title="Ocultar controles" class="p-1 rounded-full hover:bg-white/10 text-pink-100/75 transition cursor-pointer" aria-label="Ocultar controles">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Botón mínimo para restaurar controles -->
+  <button id="showHudBtn" title="Mostrar controles" class="glass-hud hidden fixed bottom-4 right-4 z-10 p-2 rounded-full text-pink-100/80 hover:text-white transition cursor-pointer" aria-label="Mostrar controles">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/>
+      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/>
+      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/>
+      <line x1="2" x2="22" y1="2" y2="22"/>
+    </svg>
+  </button>
+
+  <script>
+    /**
+     * Campo Amplio y Abierto de Tulipanes Rosados al Atardecer con Crecimiento Progresivo
+     *
+     * Arquitectura y diseño:
+     * 1. Fondo atmosférico de atardecer: cielo dorado-ámbar con sol filtrándose entre troncos
+     *    y copas desenfocadas, colina suave abierta en el horizonte y bandas lejanas de tulipanes
+     *    rosados a contraluz (sin jardinera elevada ni tablones).
+     * 2. Suelo abierto del campo: pradera fértil con textura orgánica y montículos suaves donde
+     *    nacen y crecen escalonadamente ~38 tulipanes desde el suelo hasta su altura plena.
+     * 3. Crecimiento gradual y silueta inequívoca de tulipán: cada flor cuenta con su propio
+     *    retraso, duración y curva ease-out cubic; el tallo se eleva desde la tierra, las hojas
+     *    lanceoladas se despliegan abrazando la base y la copa de 6 pétalos (3 exteriores y
+     *    3 interiores) con base estrecha y punta ovalada/ligeramente aguda emerge y se abre
+     *    suavemente con bordes iluminados a contraluz y gotas de rocío.
+     * 4. Interactividad: paralaje multicapa con el cursor/tacto, ráfagas de brisa al hacer clic
+     *    o tocar, partículas doradas de polen flotando y botón "Crecer de nuevo".
+     */
+
+    const canvas = document.getElementById('tulipCanvas');
+    const ctx = canvas.getContext('2d');
+    const overlayMode = new URLSearchParams(window.location.search).has('overlay');
+    if (overlayMode) document.documentElement.classList.add('overlay-mode');
+
+    // Capa fuera de pantalla pre-renderizada para el cielo, el sol, el horizonte y el bokeh del campo
+    const bgLayer = document.createElement('canvas');
+    const bgCtx = bgLayer.getContext('2d');
+
+    let width = 0;
+    let height = 0;
+    let dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+
+    // Estado del puntero para paralaje suave
+    const pointer = {
+      x: 0.5,
+      y: 0.5,
+      targetX: 0.5,
+      targetY: 0.5
+    };
+
+    // Colecciones de elementos de la escena
+    let tulips = [];
+    let leaves = [];
+    let sparkles = [];
+    let windGusts = [];
+    let soilClumps = [];
+    let lastTime = 0;
+    let elapsedTime = 0;
+    let growthClock = 0; // Reloj dedicado al ciclo de crecimiento de las flores
+    let targetSeasonPhase = 0;
+    let currentSeasonPhase = 0;
+    let targetSeasonBlend = 0;
+    let currentSeasonBlend = 0;
+
+    function createSeededRandom(seed) {
+      let s = seed % 2147483647;
+      if (s <= 0) s += 2147483646;
+      return function () {
+        s = (s * 16807) % 2147483647;
+        return (s - 1) / 2147483646;
+      };
+    }
+
+    function easeOutCubic(t) {
+      const clamped = Math.max(0, Math.min(1, t));
+      return 1 - Math.pow(1 - clamped, 3);
+    }
+
+    function easeOutQuart(t) {
+      const clamped = Math.max(0, Math.min(1, t));
+      return 1 - Math.pow(1 - clamped, 4);
+    }
+
+    function restartGrowth() {
+      growthClock = 0;
+      for (let i = 0; i < tulips.length; i++) {
+        tulips[i].growth = 0;
+      }
+      for (let i = 0; i < leaves.length; i++) {
+        leaves[i].growth = 0;
+      }
+    }
+
+    // Ciclo ambiental continuo de 28 segundos por fase:
+    // Fase 0: Atardecer rosado | Fase 1: Anochecer con luna | Fase 2: Sol de la tarde
+    const PHASE_DURATION = 28;
+    const TRANSITION_WINDOW = 5.5; // Segundos de mezcla suave al cambiar de fase
+    const AMBIENT_PHASES = [
+      {
+        id: 'pink-sunset',
+        label: 'Atardecer rosado',
+        skyTop: [148, 72, 108],
+        skyMid: [226, 128, 152],
+        skyBot: [255, 198, 156],
+        hillTop: [122, 74, 86],
+        hillBot: [24, 15, 19],
+        groundTop: [78, 56, 54],
+        groundBot: [14, 10, 11],
+        sunPos: [0.36, 0.16],
+        sunCore: [255, 236, 214],
+        sunMid: [255, 146, 174],
+        sunOuter: [224, 96, 148],
+        sunAlpha: 0.92,
+        moonAlpha: 0.0,
+        starAlpha: 0.0,
+        rimColor: [255, 224, 218],
+        rimAlpha: 0.88,
+        pollenCore: [255, 238, 210],
+        pollenGlow: [255, 156, 184],
+        washColor: [255, 168, 186],
+        washAlpha: 0.34
+      },
+      {
+        id: 'moonlit-night',
+        label: 'Anochecer con luna',
+        skyTop: [10, 15, 38],
+        skyMid: [22, 30, 68],
+        skyBot: [44, 42, 86],
+        hillTop: [24, 30, 52],
+        hillBot: [8, 9, 18],
+        groundTop: [22, 27, 42],
+        groundBot: [7, 8, 14],
+        sunPos: [0.72, 0.14],
+        sunCore: [220, 232, 255],
+        sunMid: [110, 134, 210],
+        sunOuter: [58, 74, 148],
+        sunAlpha: 0.0,
+        moonAlpha: 1.0,
+        starAlpha: 0.88,
+        rimColor: [164, 198, 255],
+        rimAlpha: 0.72,
+        pollenCore: [210, 228, 255],
+        pollenGlow: [125, 162, 245],
+        washColor: [96, 128, 215],
+        washAlpha: 0.22
+      },
+      {
+        id: 'afternoon-sun',
+        label: 'Sol de la tarde',
+        skyTop: [198, 146, 98],
+        skyMid: [236, 182, 118],
+        skyBot: [255, 224, 154],
+        hillTop: [126, 112, 68],
+        hillBot: [22, 18, 13],
+        groundTop: [64, 70, 36],
+        groundBot: [12, 10, 7],
+        sunPos: [0.42, 0.085],
+        sunCore: [255, 254, 236],
+        sunMid: [255, 228, 136],
+        sunOuter: [244, 178, 82],
+        sunAlpha: 1.0,
+        moonAlpha: 0.0,
+        starAlpha: 0.0,
+        rimColor: [255, 248, 216],
+        rimAlpha: 0.94,
+        pollenCore: [255, 250, 215],
+        pollenGlow: [255, 206, 112],
+        washColor: [255, 234, 168],
+        washAlpha: 0.42
+      }
+    ];
+
+    let stars = [];
+    let currentAmbientState = cloneAmbientState(AMBIENT_PHASES[0]);
+    let lastDisplayedPhaseIndex = -1;
+    let lastBackgroundPhaseKey = '';
+    let bgDirty = true;
+
+    function cloneAmbientState(phase) {
+      return {
+        index: 0,
+        label: phase.label,
+        skyTop: [...phase.skyTop],
+        skyMid: [...phase.skyMid],
+        skyBot: [...phase.skyBot],
+        hillTop: [...phase.hillTop],
+        hillBot: [...phase.hillBot],
+        groundTop: [...phase.groundTop],
+        groundBot: [...phase.groundBot],
+        sunPos: [...phase.sunPos],
+        sunCore: [...phase.sunCore],
+        sunMid: [...phase.sunMid],
+        sunOuter: [...phase.sunOuter],
+        sunAlpha: phase.sunAlpha,
+        moonAlpha: phase.moonAlpha,
+        starAlpha: phase.starAlpha,
+        rimColor: [...phase.rimColor],
+        rimAlpha: phase.rimAlpha,
+        pollenCore: [...phase.pollenCore],
+        pollenGlow: [...phase.pollenGlow],
+        washColor: [...phase.washColor],
+        washAlpha: phase.washAlpha
+      };
+    }
+
+    function lerpNum(a, b, t) {
+      return a + (b - a) * t;
+    }
+
+    function lerpRgb(c1, c2, t) {
+      return [
+        Math.round(lerpNum(c1[0], c2[0], t)),
+        Math.round(lerpNum(c1[1], c2[1], t)),
+        Math.round(lerpNum(c1[2], c2[2], t))
+      ];
+    }
+
+    function rgbaStr(rgb, alpha) {
+      return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${Math.max(0, Math.min(1, alpha)).toFixed(3)})`;
+    }
+
+    function rgbStr(rgb) {
+      return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+    }
+
+    /**
+     * Calcula la mezcla suave entre fases cada 28 segundos y actualiza el indicador del HUD
+     */
+    function updateAmbientCycle() {
+      const cycleTotal = PHASE_DURATION * AMBIENT_PHASES.length; // 84s por ciclo completo
+      const cyclePos = elapsedTime % cycleTotal;
+      const activeIdx = Math.floor(cyclePos / PHASE_DURATION);
+      const timeInPhase = cyclePos - activeIdx * PHASE_DURATION;
+      const nextIdx = (activeIdx + 1) % AMBIENT_PHASES.length;
+
+      let blend = 0;
+      if (timeInPhase > PHASE_DURATION - TRANSITION_WINDOW) {
+        const rawBlend = (timeInPhase - (PHASE_DURATION - TRANSITION_WINDOW)) / TRANSITION_WINDOW;
+        blend = easeOutCubic(Math.max(0, Math.min(1, rawBlend)));
+      }
+
+      const fromP = AMBIENT_PHASES[activeIdx];
+      const toP = AMBIENT_PHASES[nextIdx];
+
+      currentAmbientState.index = blend > 0.55 ? nextIdx : activeIdx;
+      currentAmbientState.label = blend > 0.55 ? toP.label : fromP.label;
+      currentAmbientState.skyTop = lerpRgb(fromP.skyTop, toP.skyTop, blend);
+      currentAmbientState.skyMid = lerpRgb(fromP.skyMid, toP.skyMid, blend);
+      currentAmbientState.skyBot = lerpRgb(fromP.skyBot, toP.skyBot, blend);
+      currentAmbientState.hillTop = lerpRgb(fromP.hillTop, toP.hillTop, blend);
+      currentAmbientState.hillBot = lerpRgb(fromP.hillBot, toP.hillBot, blend);
+      currentAmbientState.groundTop = lerpRgb(fromP.groundTop, toP.groundTop, blend);
+      currentAmbientState.groundBot = lerpRgb(fromP.groundBot, toP.groundBot, blend);
+      currentAmbientState.sunPos = [
+        lerpNum(fromP.sunPos[0], toP.sunPos[0], blend),
+        lerpNum(fromP.sunPos[1], toP.sunPos[1], blend)
+      ];
+      currentAmbientState.sunCore = lerpRgb(fromP.sunCore, toP.sunCore, blend);
+      currentAmbientState.sunMid = lerpRgb(fromP.sunMid, toP.sunMid, blend);
+      currentAmbientState.sunOuter = lerpRgb(fromP.sunOuter, toP.sunOuter, blend);
+      currentAmbientState.sunAlpha = lerpNum(fromP.sunAlpha, toP.sunAlpha, blend);
+      currentAmbientState.moonAlpha = lerpNum(fromP.moonAlpha, toP.moonAlpha, blend);
+      currentAmbientState.starAlpha = lerpNum(fromP.starAlpha, toP.starAlpha, blend);
+      currentAmbientState.rimColor = lerpRgb(fromP.rimColor, toP.rimColor, blend);
+      currentAmbientState.rimAlpha = lerpNum(fromP.rimAlpha, toP.rimAlpha, blend);
+      currentAmbientState.pollenCore = lerpRgb(fromP.pollenCore, toP.pollenCore, blend);
+      currentAmbientState.pollenGlow = lerpRgb(fromP.pollenGlow, toP.pollenGlow, blend);
+      currentAmbientState.washColor = lerpRgb(fromP.washColor, toP.washColor, blend);
+      currentAmbientState.washAlpha = lerpNum(fromP.washAlpha, toP.washAlpha, blend);
+
+      if (phaseBadge && currentAmbientState.index !== lastDisplayedPhaseIndex) {
+        lastDisplayedPhaseIndex = currentAmbientState.index;
+        phaseBadge.textContent = currentAmbientState.label;
+      }
+
+      // Solo regenerar el lienzo de fondo en saltos claros de fase (cada ~0.25 de mezcla) para evitar re-renderizar en cada frame
+      const blendBucket = Math.round(blend * 4);
+      const phaseKey = `${activeIdx}_${nextIdx}_${blendBucket}`;
+      if (phaseKey !== lastBackgroundPhaseKey) {
+        lastBackgroundPhaseKey = phaseKey;
+        bgDirty = true;
+      }
+    }
+
+    /**
+     * Inicializa y redimensiona todos los lienzos y elementos botánicos del campo abierto
+     */
+    function resizeScene() {
+      width = Math.max(1, window.innerWidth);
+      height = Math.max(1, window.innerHeight);
+      dpr = Math.min(window.devicePixelRatio || 1, 1.25);
+
+      canvas.width = Math.floor(width * dpr);
+      canvas.height = Math.floor(height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      // Lienzo de fondo con margen extra para permitir movimiento de paralaje sin bordes
+      const pad = 70;
+      bgLayer.width = Math.floor((width + pad * 2) * dpr);
+      bgLayer.height = Math.floor((height + pad * 2) * dpr);
+      bgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      buildStarField();
+      bgDirty = true;
+      renderOpenFieldBackground(pad);
+      buildOpenFieldData();
+    }
+
+    function buildStarField() {
+      const rand = createSeededRandom(44219);
+      stars = [];
+      for (let i = 0; i < 42; i++) {
+        stars.push({
+          xRatio: 0.04 + rand() * 0.92,
+          yRatio: 0.02 + rand() * 0.19,
+          r: 0.8 + rand() * 1.5,
+          twinkleSpeed: 1.5 + rand() * 2.5,
+          phase: rand() * Math.PI * 2
+        });
+      }
+    }
+
+    /**
+     * Pre-renderiza el cielo de la fase actual, el sol o luna, la loma abierta y las franjas lejanas
+     */
+    function renderOpenFieldBackground(pad) {
+      if (!bgDirty) return;
+      bgDirty = false;
+      const totalW = width + pad * 2;
+      const totalH = height + pad * 2;
+      const rand = createSeededRandom(918273);
+      const st = currentAmbientState;
+
+      bgCtx.clearRect(0, 0, totalW, totalH);
+
+      // 1. Cielo dinámico según la fase ambiental actual
+      const skyGrad = bgCtx.createLinearGradient(0, 0, 0, totalH * 0.44);
+      skyGrad.addColorStop(0.00, rgbStr(st.skyTop));
+      skyGrad.addColorStop(0.45, rgbStr(st.skyMid));
+      skyGrad.addColorStop(0.82, rgbStr(st.skyBot));
+      skyGrad.addColorStop(1.00, rgbStr(st.hillTop));
+      bgCtx.fillStyle = skyGrad;
+      bgCtx.fillRect(0, 0, totalW, totalH);
+
+      // 2. Estrellas tenues visibles en el anochecer
+      if (st.starAlpha > 0.01) {
+        for (let i = 0; i < stars.length; i++) {
+          const s = stars[i];
+          const sx = pad + width * s.xRatio;
+          const sy = pad + height * s.yRatio;
+          const twinkle = 0.65 + 0.35 * Math.sin(elapsedTime * s.twinkleSpeed + s.phase);
+          bgCtx.fillStyle = rgbaStr([235, 244, 255], st.starAlpha * twinkle);
+          bgCtx.beginPath();
+          bgCtx.arc(sx, sy, s.r, 0, Math.PI * 2);
+          bgCtx.fill();
+        }
+      }
+
+      // 3. Resplandor solar en la zona superior (atardecer rosado y sol de la tarde)
+      const sunX = pad + width * st.sunPos[0];
+      const sunY = pad + height * st.sunPos[1];
+
+      if (st.sunAlpha > 0.01) {
+        const sunHalo = bgCtx.createRadialGradient(sunX, sunY, 8, sunX, sunY, Math.max(width, height) * 0.46);
+        sunHalo.addColorStop(0.00, rgbaStr(st.sunCore, st.sunAlpha));
+        sunHalo.addColorStop(0.10, rgbaStr(st.sunMid, st.sunAlpha * 0.88));
+        sunHalo.addColorStop(0.28, rgbaStr(st.sunOuter, st.sunAlpha * 0.50));
+        sunHalo.addColorStop(0.58, rgbaStr(st.sunOuter, st.sunAlpha * 0.18));
+        sunHalo.addColorStop(1.00, rgbaStr(st.sunOuter, 0));
+        bgCtx.fillStyle = sunHalo;
+        bgCtx.fillRect(0, 0, totalW, totalH * 0.58);
+      }
+
+      // 4. Luna llena con halo suave en el anochecer
+      if (st.moonAlpha > 0.01) {
+        const moonX = pad + width * 0.74;
+        const moonY = pad + height * 0.12;
+        const moonR = Math.max(16, Math.min(width, height) * 0.036);
+
+        const moonAura = bgCtx.createRadialGradient(moonX, moonY, moonR * 0.4, moonX, moonY, moonR * 5.2);
+        moonAura.addColorStop(0.00, rgbaStr([224, 236, 255], st.moonAlpha * 0.65));
+        moonAura.addColorStop(0.35, rgbaStr([146, 174, 240], st.moonAlpha * 0.24));
+        moonAura.addColorStop(1.00, rgbaStr([90, 120, 200], 0));
+        bgCtx.fillStyle = moonAura;
+        bgCtx.beginPath();
+        bgCtx.arc(moonX, moonY, moonR * 5.2, 0, Math.PI * 2);
+        bgCtx.fill();
+
+        const moonDisc = bgCtx.createRadialGradient(
+          moonX - moonR * 0.25,
+          moonY - moonR * 0.25,
+          moonR * 0.1,
+          moonX,
+          moonY,
+          moonR
+        );
+        moonDisc.addColorStop(0.00, rgbaStr([252, 254, 255], st.moonAlpha));
+        moonDisc.addColorStop(0.75, rgbaStr([218, 230, 252], st.moonAlpha * 0.96));
+        moonDisc.addColorStop(1.00, rgbaStr([178, 198, 236], st.moonAlpha * 0.88));
+        bgCtx.fillStyle = moonDisc;
+        bgCtx.beginPath();
+        bgCtx.arc(moonX, moonY, moonR, 0, Math.PI * 2);
+        bgCtx.fill();
+      }
+
+      // 5. Troncos lejanos y siluetas suaves del borde del campo en contraluz
+      bgCtx.save();
+      bgCtx.globalAlpha = 0.86;
+
+      const treeTrunks = [
+        { x: 0.03, w: 0.038, lean: 0.01 },
+        { x: 0.12, w: 0.025, lean: -0.008 },
+        { x: 0.21, w: 0.044, lean: 0.011 },
+        { x: 0.52, w: 0.028, lean: -0.009 },
+        { x: 0.64, w: 0.036, lean: 0.007 },
+        { x: 0.78, w: 0.026, lean: 0.012 },
+        { x: 0.89, w: 0.042, lean: -0.008 },
+        { x: 0.96, w: 0.030, lean: -0.006 }
+      ];
+
+      treeTrunks.forEach((tr) => {
+        const tx = pad + width * tr.x;
+        const tw = Math.max(11, width * tr.w);
+        const topX = tx + width * tr.lean;
+        const trunkH = height * 0.24;
+
+        const trunkGrad = bgCtx.createLinearGradient(tx - tw * 0.5, 0, tx + tw * 0.5, 0);
+        trunkGrad.addColorStop(0.0, 'rgba(72, 52, 54, 0.72)');
+        trunkGrad.addColorStop(0.5, 'rgba(38, 28, 36, 0.84)');
+        trunkGrad.addColorStop(1.0, 'rgba(84, 62, 64, 0.68)');
+
+        bgCtx.fillStyle = trunkGrad;
+        bgCtx.beginPath();
+        bgCtx.moveTo(tx - tw * 0.52, pad + trunkH);
+        bgCtx.lineTo(topX - tw * 0.4, 0);
+        bgCtx.lineTo(topX + tw * 0.4, 0);
+        bgCtx.lineTo(tx + tw * 0.52, pad + trunkH);
+        bgCtx.closePath();
+        bgCtx.fill();
+      });
+
+      // 6. Loma suave y abierta del campo en el horizonte
+      const hillBaseY = pad + height * 0.22;
+      const hillGrad = bgCtx.createLinearGradient(0, pad + height * 0.14, 0, totalH);
+      hillGrad.addColorStop(0.00, rgbStr(st.hillTop));
+      hillGrad.addColorStop(0.55, rgbStr(lerpRgb(st.hillTop, st.hillBot, 0.65)));
+      hillGrad.addColorStop(1.00, rgbStr(st.hillBot));
+      bgCtx.fillStyle = hillGrad;
+
+      bgCtx.beginPath();
+      bgCtx.moveTo(0, pad + height * 0.185);
+      bgCtx.quadraticCurveTo(totalW * 0.28, pad + height * 0.145, totalW * 0.58, pad + height * 0.175);
+      bgCtx.quadraticCurveTo(totalW * 0.82, pad + height * 0.195, totalW, pad + height * 0.165);
+      bgCtx.lineTo(totalW, totalH);
+      bgCtx.lineTo(0, totalH);
+      bgCtx.closePath();
+      bgCtx.fill();
+
+      // Follaje verde/azulado en la loma lejana
+      for (let g = 0; g < 24; g++) {
+        const gx = pad + width * (0.04 + rand() * 0.92);
+        const gy = hillBaseY - height * 0.03 + rand() * height * 0.08;
+        bgCtx.fillStyle = st.moonAlpha > 0.5
+          ? 'rgba(34, 48, 76, 0.62)'
+          : (rand() > 0.45 ? 'rgba(92, 118, 48, 0.58)' : 'rgba(60, 84, 34, 0.65)');
+        bgCtx.beginPath();
+        bgCtx.ellipse(gx, gy, 22 + rand() * 34, 10 + rand() * 15, (rand() - 0.5) * 0.4, 0, Math.PI * 2);
+        bgCtx.fill();
+      }
+
+      // 7. Franja lejana de tulipanes rosados desenfocados extendiéndose por el campo
+      const distantTulipCount = 34;
+      for (let i = 0; i < distantTulipCount; i++) {
+        const dx = pad + width * (0.06 + rand() * 0.88);
+        const dy = pad + height * (0.145 + rand() * 0.11);
+        const radius = (5 + rand() * 6.5) * Math.min(1.25, Math.max(0.7, width / 920));
+
+        bgCtx.strokeStyle = st.moonAlpha > 0.5 ? 'rgba(48, 68, 92, 0.45)' : 'rgba(78, 102, 46, 0.42)';
+        bgCtx.lineWidth = 1.8;
+        bgCtx.beginPath();
+        bgCtx.moveTo(dx, dy);
+        bgCtx.lineTo(dx + (rand() - 0.5) * 5, dy + radius * 3.0);
+        bgCtx.stroke();
+
+        const bGrad = bgCtx.createRadialGradient(dx, dy - radius * 0.3, 1, dx, dy, radius * 1.3);
+        if (st.moonAlpha > 0.5) {
+          bGrad.addColorStop(0.0, 'rgba(186, 168, 232, 0.85)');
+          bGrad.addColorStop(0.55, 'rgba(136, 86, 152, 0.72)');
+          bGrad.addColorStop(1.0, 'rgba(84, 44, 108, 0)');
+        } else {
+          bGrad.addColorStop(0.0, 'rgba(255, 204, 228, 0.92)');
+          bGrad.addColorStop(0.55, 'rgba(232, 114, 174, 0.80)');
+          bGrad.addColorStop(1.0, 'rgba(196, 78, 142, 0)');
+        }
+        bgCtx.fillStyle = bGrad;
+        bgCtx.beginPath();
+        bgCtx.ellipse(dx, dy, radius * 0.82, radius * 1.12, (rand() - 0.5) * 0.25, 0, Math.PI * 2);
+        bgCtx.fill();
+      }
+
+      bgCtx.restore();
+
+      // 8. Discos bokeh dorados o lunares suaves en la parte superior
+      for (let k = 0; k < 8; k++) {
+        const bx = sunX + (rand() - 0.5) * width * 0.42;
+        const by = sunY + (rand() - 0.35) * height * 0.18;
+        const br = 8 + rand() * 20;
+        const bokehGrad = bgCtx.createRadialGradient(bx, by, 0, bx, by, br);
+        bokehGrad.addColorStop(0.0, rgbaStr(st.pollenCore, 0.28));
+        bokehGrad.addColorStop(0.75, rgbaStr(st.pollenGlow, 0.12));
+        bokehGrad.addColorStop(1.0, rgbaStr(st.pollenGlow, 0));
+        bgCtx.fillStyle = bokehGrad;
+        bgCtx.beginPath();
+        bgCtx.arc(bx, by, br, 0, Math.PI * 2);
+        bgCtx.fill();
+      }
+    }
+
+    /**
+     * Construye el campo abierto de tulipanes rosados, sus hojas lanceoladas y la textura del suelo
+     */
+    function buildOpenFieldData() {
+      const rand = createSeededRandom(55109);
+      const scaleRef = Math.min(width, height);
+      const flowerScaleBase = overlayMode
+        ? Math.max(0.50, Math.min(0.98, scaleRef / 950))
+        : Math.max(0.66, Math.min(1.36, scaleRef / 740));
+
+      // Distribución amplia y orgánica por todo el campo, de fondo a primer plano
+      const fieldLayout = [
+        // Fondo lejano del campo (profundidad 0.22 - 0.38)
+        { bx: 0.10, by: 0.36, fx: 0.095, fy: 0.205, s: 0.72, tilt: -0.06, open: 0.52, depth: 0.24, dew: false },
+        { bx: 0.22, by: 0.39, fx: 0.225, fy: 0.225, s: 0.76, tilt: 0.03,  open: 0.55, depth: 0.28, dew: false },
+        { bx: 0.35, by: 0.37, fx: 0.355, fy: 0.195, s: 0.74, tilt: 0.05,  open: 0.50, depth: 0.26, dew: false },
+        { bx: 0.48, by: 0.40, fx: 0.490, fy: 0.220, s: 0.78, tilt: 0.04,  open: 0.58, depth: 0.30, dew: false },
+        { bx: 0.61, by: 0.38, fx: 0.625, fy: 0.205, s: 0.76, tilt: 0.07,  open: 0.52, depth: 0.28, dew: false },
+        { bx: 0.75, by: 0.41, fx: 0.765, fy: 0.235, s: 0.78, tilt: 0.06,  open: 0.56, depth: 0.32, dew: false },
+        { bx: 0.89, by: 0.39, fx: 0.905, fy: 0.215, s: 0.75, tilt: 0.08,  open: 0.54, depth: 0.29, dew: false },
+
+        // Franja media-alta (profundidad 0.40 - 0.56)
+        { bx: 0.06, by: 0.48, fx: 0.055, fy: 0.275, s: 0.86, tilt: -0.08, open: 0.58, depth: 0.42, dew: false },
+        { bx: 0.17, by: 0.51, fx: 0.175, fy: 0.295, s: 0.88, tilt: -0.02, open: 0.60, depth: 0.46, dew: false },
+        { bx: 0.29, by: 0.49, fx: 0.295, fy: 0.280, s: 0.86, tilt: 0.04,  open: 0.55, depth: 0.44, dew: false },
+        { bx: 0.42, by: 0.52, fx: 0.430, fy: 0.300, s: 0.90, tilt: 0.05,  open: 0.62, depth: 0.48, dew: false },
+        { bx: 0.55, by: 0.50, fx: 0.565, fy: 0.285, s: 0.88, tilt: 0.06,  open: 0.56, depth: 0.46, dew: false },
+        { bx: 0.68, by: 0.53, fx: 0.695, fy: 0.310, s: 0.90, tilt: 0.07,  open: 0.58, depth: 0.50, dew: false },
+        { bx: 0.82, by: 0.51, fx: 0.840, fy: 0.295, s: 0.88, tilt: 0.08,  open: 0.54, depth: 0.47, dew: false },
+        { bx: 0.94, by: 0.54, fx: 0.955, fy: 0.315, s: 0.86, tilt: 0.09,  open: 0.56, depth: 0.51, dew: false },
+
+        // Franja central del campo (profundidad 0.58 - 0.76)
+        { bx: 0.12, by: 0.63, fx: 0.115, fy: 0.355, s: 0.98, tilt: -0.06, open: 0.62, depth: 0.60, dew: false },
+        { bx: 0.24, by: 0.66, fx: 0.240, fy: 0.375, s: 1.02, tilt: -0.03, open: 0.60, depth: 0.64, dew: false },
+        { bx: 0.34, by: 0.64, fx: 0.350, fy: 0.365, s: 0.96, tilt: 0.04,  open: 0.54, depth: 0.62, dew: false },
+        { bx: 0.46, by: 0.68, fx: 0.470, fy: 0.385, s: 1.06, tilt: 0.03,  open: 0.66, depth: 0.68, dew: true  },
+        { bx: 0.59, by: 0.66, fx: 0.605, fy: 0.375, s: 1.04, tilt: 0.05,  open: 0.62, depth: 0.66, dew: true  },
+        { bx: 0.72, by: 0.65, fx: 0.740, fy: 0.365, s: 1.00, tilt: 0.07,  open: 0.58, depth: 0.65, dew: false },
+        { bx: 0.86, by: 0.68, fx: 0.880, fy: 0.385, s: 1.02, tilt: 0.08,  open: 0.60, depth: 0.69, dew: false },
+
+        // Franja intermedia-baja (profundidad 0.75 - 0.88)
+        { bx: 0.07, by: 0.77, fx: 0.060, fy: 0.435, s: 1.08, tilt: -0.09, open: 0.64, depth: 0.76, dew: true  },
+        { bx: 0.19, by: 0.80, fx: 0.190, fy: 0.460, s: 1.12, tilt: -0.04, open: 0.62, depth: 0.80, dew: false },
+        { bx: 0.31, by: 0.79, fx: 0.320, fy: 0.470, s: 1.04, tilt: 0.05,  open: 0.52, depth: 0.78, dew: false },
+        { bx: 0.41, by: 0.82, fx: 0.420, fy: 0.465, s: 1.14, tilt: 0.03,  open: 0.66, depth: 0.82, dew: true  },
+        { bx: 0.53, by: 0.81, fx: 0.545, fy: 0.455, s: 1.12, tilt: 0.04,  open: 0.62, depth: 0.81, dew: true  },
+        { bx: 0.65, by: 0.79, fx: 0.670, fy: 0.445, s: 1.08, tilt: 0.06,  open: 0.60, depth: 0.79, dew: false },
+        { bx: 0.78, by: 0.82, fx: 0.800, fy: 0.470, s: 1.12, tilt: 0.07,  open: 0.62, depth: 0.83, dew: true  },
+        { bx: 0.91, by: 0.80, fx: 0.930, fy: 0.455, s: 1.08, tilt: 0.09,  open: 0.58, depth: 0.80, dew: false },
+
+        // Primer plano abierto (profundidad 0.88 - 1.00)
+        { bx: 0.04, by: 0.93, fx: 0.035, fy: 0.585, s: 1.14, tilt: -0.10, open: 0.44, depth: 0.92, dew: true  },
+        { bx: 0.14, by: 0.92, fx: 0.135, fy: 0.535, s: 1.20, tilt: -0.07, open: 0.64, depth: 0.93, dew: true  },
+        { bx: 0.26, by: 0.95, fx: 0.270, fy: 0.605, s: 1.10, tilt: 0.03,  open: 0.42, depth: 0.96, dew: true  },
+        { bx: 0.37, by: 0.94, fx: 0.380, fy: 0.530, s: 1.24, tilt: 0.02,  open: 0.66, depth: 0.95, dew: true  },
+        { bx: 0.50, by: 0.96, fx: 0.505, fy: 0.545, s: 1.28, tilt: 0.02,  open: 0.68, depth: 1.00, dew: true  },
+        { bx: 0.62, by: 0.94, fx: 0.635, fy: 0.535, s: 1.22, tilt: 0.05,  open: 0.62, depth: 0.94, dew: true  },
+        { bx: 0.75, by: 0.95, fx: 0.770, fy: 0.540, s: 1.22, tilt: 0.06,  open: 0.64, depth: 0.97, dew: true  },
+        { bx: 0.88, by: 0.93, fx: 0.900, fy: 0.525, s: 1.18, tilt: 0.08,  open: 0.60, depth: 0.93, dew: false }
+      ];
+
+      const shorelineLayout = overlayMode
+        ? fieldLayout.map((item) => ({
+            ...item,
+            bx: 0.05 + item.bx * 0.42,
+            by: 0.86 + item.by * 0.14,
+            fx: 0.055 + item.fx * 0.45,
+            fy: 0.67 + item.fy * 0.18
+          }))
+        : fieldLayout;
+
+      tulips = shorelineLayout.map((item, idx) => {
+        const baseX = width * item.bx;
+        const baseY = height * item.by;
+        const headX = width * item.fx;
+        const headY = height * item.fy;
+
+        const dewDrops = [];
+        if (item.dew) {
+          const dropCount = 3 + Math.floor(rand() * 4);
+          for (let d = 0; d < dropCount; d++) {
+            dewDrops.push({
+              rx: (rand() - 0.5) * 0.52,
+              ry: -0.15 + rand() * 0.52,
+              r: 1.05 + rand() * 1.3
+            });
+          }
+        }
+
+        // Retraso escalonado para que las flores crezcan poco a poco a través del campo
+        const delay = 0.12 + rand() * 3.6 + (1 - item.depth) * 0.55;
+        const duration = 2.5 + rand() * 1.1;
+
+        return {
+          id: idx,
+          baseX,
+          baseY,
+          headX,
+          headY,
+          scale: item.s * flowerScaleBase,
+          tilt: item.tilt,
+          open: item.open,
+          depth: item.depth,
+          delay,
+          duration,
+          growth: 0,
+          phase: rand() * Math.PI * 2,
+          freq: 0.85 + rand() * 0.45,
+          swayAmp: (7 + item.depth * 9) * flowerScaleBase,
+          stemThickness: (3.0 + item.depth * 2.2) * flowerScaleBase,
+          stemTint: rand(),
+          hueShift: (rand() - 0.5) * 8,
+          dewDrops
+        };
+      });
+
+      // Ordenar de atrás hacia adelante según profundidad para superposición correcta
+      tulips.sort((a, b) => a.depth - b.depth);
+      tulips.forEach((t) => {
+        t.home = {
+          baseX: t.baseX,
+          baseY: t.baseY,
+          headX: t.headX,
+          headY: t.headY,
+          scale: t.scale,
+          swayAmp: t.swayAmp,
+          stemThickness: t.stemThickness
+        };
+      });
+
+      // Generar hojas lanceoladas anchas y curvadas abrazando la base de cada tulipán
+      leaves = [];
+      tulips.forEach((t) => {
+        const leafCount = t.depth > 0.62 ? 3 : 2;
+        for (let l = 0; l < leafCount; l++) {
+          const side = l === 0 ? -1 : l === 1 ? 1 : (rand() > 0.5 ? 1 : -1);
+          const leafH = (82 + t.depth * 125 + rand() * 38) * flowerScaleBase;
+          const leafW = (18 + t.depth * 20) * flowerScaleBase;
+          const curve = side * (22 + rand() * 34) * flowerScaleBase;
+          const topCurl = -side * (8 + rand() * 16) * flowerScaleBase;
+
+          leaves.push({
+            parentId: t.id,
+            baseX: t.baseX + side * (3 + rand() * 8) * flowerScaleBase,
+            baseY: t.baseY + (3 + rand() * 10) * flowerScaleBase,
+            height: leafH,
+            width: leafW,
+            curve,
+            topCurl,
+            depth: t.depth - 0.015 + rand() * 0.03,
+            delay: Math.max(0, t.delay - 0.25),
+            duration: t.duration * 0.85,
+            growth: 0,
+            phase: t.phase + rand() * 1.2,
+            freq: t.freq * 0.9,
+            shade: rand()
+          });
+        }
+      });
+      leaves.sort((a, b) => a.depth - b.depth);
+      leaves.forEach((leaf) => {
+        leaf.home = {
+          baseX: leaf.baseX,
+          baseY: leaf.baseY,
+          height: leaf.height,
+          width: leaf.width,
+          curve: leaf.curve,
+          topCurl: leaf.topCurl
+        };
+      });
+
+      // Textura orgánica del suelo abierto del campo (hierba baja, tierra y brotes)
+      soilClumps = [];
+      for (let s = 0; s < 48; s++) {
+        soilClumps.push({
+          x: width * (0.02 + rand() * 0.96),
+          y: height * (0.35 + rand() * 0.64),
+          rx: 3 + rand() * 12,
+          ry: 1.5 + rand() * 5,
+          rot: rand() * Math.PI,
+          tone: rand()
+        });
+      }
+
+      // Inicializar partículas flotantes de polen dorado a contraluz
+      if (sparkles.length === 0) {
+        for (let p = 0; p < 24; p++) {
+          sparkles.push(createSparkle(true));
+        }
+      }
+    }
+
+    /**
+     * Crea una partícula luminosa de polen dorado flotando en la brisa
+     */
+    function createSparkle(randomY = false, originX = null, originY = null) {
+      return {
+        x: originX !== null ? originX + (Math.random() - 0.5) * 90 : Math.random() * width,
+        y: originY !== null ? originY + (Math.random() - 0.5) * 60 : (randomY ? Math.random() * height * 0.78 : height * 0.65),
+        vx: 8 + Math.random() * 16,
+        vy: -10 - Math.random() * 18,
+        r: 1.2 + Math.random() * 2.4,
+        alpha: 0.35 + Math.random() * 0.6,
+        phase: Math.random() * Math.PI * 2,
+        life: 0,
+        maxLife: 4 + Math.random() * 5
+      };
+    }
+
+    /**
+     * Calcula el desplazamiento horizontal extra provocado por ráfagas de viento interactivas
+     */
+    function getGustOffset(x, y, depth) {
+      let total = 0;
+      for (let i = 0; i < windGusts.length; i++) {
+        const g = windGusts[i];
+        const progress = g.age / g.maxAge;
+        const waveRadius = progress * Math.max(width, height) * 0.85;
+        const dist = Math.hypot(x - g.x, y - g.y);
+        const band = Math.abs(dist - waveRadius);
+        if (band < 160) {
+          const envelope = (1 - band / 160) * Math.sin(progress * Math.PI);
+          total += Math.sin(progress * Math.PI * 3.5) * 28 * envelope * (0.4 + depth * 0.6);
+        }
+      }
+      return total;
+    }
+
+    function updateSeasonalGarden() {
+      if (!overlayMode) return;
+      const seasonStyles = [
+        { spread: 1.00, shiftX: 0.000, groundY: 0.000, stems: 1.00, flowers: 1.00, leaves: 1.00 },
+        { spread: 0.96, shiftX: -0.012, groundY: 0.008, stems: 0.86, flowers: 0.80, leaves: 0.88 },
+        { spread: 1.04, shiftX: 0.012, groundY: -0.008, stems: 0.94, flowers: 0.92, leaves: 0.94 }
+      ];
+      const from = seasonStyles[currentSeasonPhase];
+      const to = seasonStyles[(currentSeasonPhase + 1) % seasonStyles.length];
+      const mix = currentSeasonBlend;
+      const blend = (key) => from[key] + (to[key] - from[key]) * mix;
+      const spread = blend('spread');
+      const shiftX = blend('shiftX') * width;
+      const groundY = blend('groundY') * height;
+      const stemScale = blend('stems');
+      const flowerScale = blend('flowers');
+      const leafScale = blend('leaves');
+
+      tulips.forEach((t) => {
+        t.baseX = width * 0.5 + (t.home.baseX - width * 0.5) * spread + shiftX;
+        t.baseY = t.home.baseY + groundY;
+        t.headX = t.baseX + (t.home.headX - t.home.baseX) * spread;
+        t.headY = t.baseY + (t.home.headY - t.home.baseY) * stemScale;
+        t.scale = t.home.scale * flowerScale;
+        t.swayAmp = t.home.swayAmp * flowerScale;
+        t.stemThickness = t.home.stemThickness * flowerScale;
+      });
+      leaves.forEach((leaf) => {
+        const parent = tulips.find((t) => t.id === leaf.parentId);
+        if (!parent) return;
+        leaf.baseX = parent.baseX + (leaf.home.baseX - parent.home.baseX) * leafScale;
+        leaf.baseY = parent.baseY + (leaf.home.baseY - parent.home.baseY) * leafScale;
+        leaf.height = leaf.home.height * leafScale;
+        leaf.width = leaf.home.width * leafScale;
+        leaf.curve = leaf.home.curve * leafScale;
+        leaf.topCurl = leaf.home.topCurl * leafScale;
+      });
+    }
+
+    /**
+     * Dibuja el suelo abierto del campo con degradado adaptado a la fase actual
+     */
+    function drawOpenFieldGround(px, py) {
+      const st = currentAmbientState;
+      const groundTop = height * 0.33;
+      const groundGrad = ctx.createLinearGradient(0, groundTop, 0, height);
+      groundGrad.addColorStop(0.00, rgbaStr(st.groundTop, 0.76));
+      groundGrad.addColorStop(0.45, rgbaStr(lerpRgb(st.groundTop, st.groundBot, 0.55), 0.90));
+      groundGrad.addColorStop(1.00, rgbaStr(st.groundBot, 1.00));
+
+      ctx.fillStyle = groundGrad;
+      ctx.beginPath();
+      ctx.moveTo(0, groundTop + py * 0.35);
+      ctx.quadraticCurveTo(width * 0.5, groundTop - height * 0.015 + py * 0.35, width, groundTop + py * 0.35);
+      ctx.lineTo(width, height);
+      ctx.lineTo(0, height);
+      ctx.closePath();
+      ctx.fill();
+
+      // Motas de tierra, pasto bajo y sombras suaves en el suelo
+      for (let i = 0; i < soilClumps.length; i++) {
+        const sc = soilClumps[i];
+        const sx = sc.x + px * 0.52;
+        const sy = sc.y + py * 0.52;
+        ctx.fillStyle = sc.tone > 0.55
+          ? rgbaStr(st.groundTop, 0.32)
+          : sc.tone > 0.28
+            ? 'rgba(42, 34, 38, 0.36)'
+            : 'rgba(10, 8, 12, 0.55)';
+        ctx.beginPath();
+        ctx.ellipse(sx, sy, sc.rx, sc.ry, sc.rot, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    /**
+     * Dibuja una hoja lanceolada de tulipán que se despliega abrazando la base al crecer
+     */
+    function drawTulipLeaf(leaf, px, py) {
+      const g = leaf.growth;
+      if (g <= 0.01) return;
+
+      const pFactor = 0.45 + leaf.depth * 0.55;
+      const bx = leaf.baseX + px * pFactor;
+      const by = leaf.baseY + py * pFactor;
+
+      const sway =
+        (Math.sin(elapsedTime * leaf.freq + leaf.phase) * (5 + leaf.depth * 5) +
+          getGustOffset(bx, by - leaf.height * 0.5, leaf.depth) * 0.65) *
+        (0.25 + 0.75 * g);
+
+      const curH = leaf.height * g;
+      const curW = leaf.width * (0.45 + 0.55 * g);
+      const curCurve = leaf.curve * (0.35 + 0.65 * g);
+      const curTopCurl = leaf.topCurl * g;
+
+      const tipX = bx + curCurve + curTopCurl + sway;
+      const tipY = by - curH;
+      const midY = by - curH * 0.52;
+
+      const leftCtrlX = bx + curCurve * 0.68 - curW * 0.65 + sway * 0.45;
+      const rightCtrlX = bx + curCurve * 0.68 + curW * 0.65 + sway * 0.45;
+
+      const leafGrad = ctx.createLinearGradient(bx, by, tipX, tipY);
+      if (leaf.shade > 0.5) {
+        leafGrad.addColorStop(0.0, '#142617');
+        leafGrad.addColorStop(0.45, '#254429');
+        leafGrad.addColorStop(0.85, '#3b643b');
+        leafGrad.addColorStop(1.0, '#4f7c4b');
+      } else {
+        leafGrad.addColorStop(0.0, '#101f13');
+        leafGrad.addColorStop(0.50, '#1e3922');
+        leafGrad.addColorStop(0.90, '#325633');
+        leafGrad.addColorStop(1.0, '#446d41');
+      }
+
+      ctx.save();
+      ctx.fillStyle = leafGrad;
+      ctx.beginPath();
+      ctx.moveTo(bx - curW * 0.18, by);
+      ctx.quadraticCurveTo(leftCtrlX, midY, tipX, tipY);
+      ctx.quadraticCurveTo(rightCtrlX, midY, bx + curW * 0.18, by);
+      ctx.closePath();
+      ctx.fill();
+
+      // Borde iluminado suave por el sol del atardecer
+      ctx.strokeStyle = 'rgba(134, 174, 114, 0.28)';
+      ctx.lineWidth = 1.1;
+      ctx.stroke();
+
+      // Nervadura central sutil
+      const spineX = bx + curCurve * 0.62 + sway * 0.45;
+      ctx.strokeStyle = 'rgba(16, 32, 18, 0.42)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.quadraticCurveTo(spineX, midY, tipX, tipY);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    /**
+     * Dibuja un pétalo individual con forma reconocible de tulipán: base estrecha,
+     * cuerpo ovalado/ligeramente agudo en la punta y luz cálida de contraluz en el borde
+     */
+    function drawTulipPetalShape(pw, ph, tipSharpness, gradStops, rimAlpha, s) {
+      const grad = ctx.createLinearGradient(0, -ph, 0, 3 * s);
+      for (let i = 0; i < gradStops.length; i++) {
+        grad.addColorStop(gradStops[i][0], gradStops[i][1]);
+      }
+
+      const tipY = -ph * (0.94 + tipSharpness * 0.08);
+      const shoulderY = -ph * 0.62;
+      const baseY = 2.5 * s;
+
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(0, baseY);
+      // Lado izquierdo: nace estrecho en la base, se ensancha en el tercio medio y converge hacia la punta
+      ctx.bezierCurveTo(-pw * 0.34, -ph * 0.16, -pw * 0.46, shoulderY, -pw * 0.14, -ph * 0.84);
+      ctx.quadraticCurveTo(-pw * 0.04, tipY - ph * 0.02, 0, tipY);
+      // Lado derecho simétrico con ligera curvatura orgánica
+      ctx.quadraticCurveTo(pw * 0.04, tipY - ph * 0.02, pw * 0.14, -ph * 0.84);
+      ctx.bezierCurveTo(pw * 0.46, shoulderY, pw * 0.34, -ph * 0.16, 0, baseY);
+      ctx.closePath();
+      ctx.fill();
+      // Luz de contraluz cálida o azulada según la fase ambiental en el borde superior del pétalo
+      const st = currentAmbientState;
+      ctx.strokeStyle = rgbaStr(st.rimColor, rimAlpha * st.rimAlpha);
+      ctx.lineWidth = 1.35 * s;
+      ctx.beginPath();
+      ctx.moveTo(-pw * 0.18, -ph * 0.78);
+      ctx.quadraticCurveTo(0, tipY - 0.5 * s, pw * 0.18, -ph * 0.78);
+      ctx.stroke();
+    }
+
+    /**
+     * Dibuja un tulipán completo creciendo desde el suelo: tallo recto/ondulado,
+     * copa de 6 pétalos (3 exteriores y 3 interiores) que se abre suavemente al crecer,
+     * venas sutiles y gotas de rocío
+     */
+    function drawTulip(tulip, px, py) {
+      const g = tulip.growth;
+      if (g <= 0.005) return;
+
+      const pFactor = 0.45 + tulip.depth * 0.55;
+      const bx = tulip.baseX + px * pFactor;
+      const by = tulip.baseY + py * pFactor;
+
+      const wave =
+        (Math.sin(elapsedTime * tulip.freq + tulip.phase) * tulip.swayAmp +
+          Math.cos(elapsedTime * (tulip.freq * 0.6) + tulip.phase) * (tulip.swayAmp * 0.32) +
+          getGustOffset(tulip.headX, tulip.headY, tulip.depth)) *
+        (0.2 + 0.8 * g);
+
+      const fullHx = tulip.headX + px * pFactor + wave;
+      const fullHy = tulip.headY + py * pFactor + Math.abs(wave) * 0.08;
+
+      // Interpolación de la altura del tallo desde el suelo hasta su posición final
+      const hx = bx + (fullHx - bx) * g;
+      const hy = by + (fullHy - by) * g;
+
+      // 1. Tallo con leve ondulación orgánica y tono verde oliva-burdeos
+      const ctrlX = (bx + hx) * 0.5 + wave * 0.22;
+      const ctrlY = (by + hy) * 0.5;
+
+      const stemGrad = ctx.createLinearGradient(bx, by, hx, hy);
+      stemGrad.addColorStop(0.00, '#22361b');
+      stemGrad.addColorStop(0.55, '#3b4e27');
+      stemGrad.addColorStop(0.85, tulip.stemTint > 0.45 ? '#594233' : '#4a572c');
+      stemGrad.addColorStop(1.00, '#6a4842');
+
+      ctx.save();
+      ctx.strokeStyle = stemGrad;
+      ctx.lineWidth = tulip.stemThickness * (0.65 + 0.35 * g);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.quadraticCurveTo(ctrlX, ctrlY, hx, hy + 3 * tulip.scale * g);
+      ctx.stroke();
+
+      // Brillo cálido lateral en el tallo
+      ctx.strokeStyle = 'rgba(186, 174, 118, 0.28)';
+      ctx.lineWidth = Math.max(0.8, tulip.stemThickness * 0.24);
+      ctx.beginPath();
+      ctx.moveTo(bx - tulip.stemThickness * 0.22, by);
+      ctx.quadraticCurveTo(ctrlX - tulip.stemThickness * 0.22, ctrlY, hx - tulip.stemThickness * 0.22, hy + 3 * tulip.scale * g);
+      ctx.stroke();
+      ctx.restore();
+
+      // La copa floral empieza a asomarse y abrirse suavemente a medida que el tallo crece
+      const budFactor = Math.max(0, Math.min(1, (g - 0.14) / 0.86));
+      if (budFactor <= 0.01) return;
+
+      const bloomEase = easeOutCubic(budFactor);
+      const s = tulip.scale * (0.34 + 0.66 * bloomEase);
+      const openness = tulip.open * (0.18 + 0.82 * bloomEase);
+      const angle = tulip.tilt + wave * 0.0042;
+      const pw = 34 * s * (0.82 + openness * 0.26);
+      const ph = 55 * s;
+
+      ctx.save();
+      ctx.translate(hx, hy);
+      ctx.rotate(angle);
+
+      // --- 3 PÉTALOS EXTERIORES (más anchos y ligeramente más oscuros en el centro) ---
+      const outerSpread = 0.20 + openness * 0.24;
+
+      // Pétalo exterior izquierdo
+      ctx.save();
+      ctx.rotate(-outerSpread);
+      drawTulipPetalShape(
+        pw * 0.96,
+        ph * 0.96,
+        0.35,
+        [
+          [0.00, '#ffd4ea'],
+          [0.32, '#f082bc'],
+          [0.78, '#cf4f94'],
+          [1.00, '#9e2c6b']
+        ],
+        0.78,
+        s
+      );
+      ctx.restore();
+
+      // Pétalo exterior derecho
+      ctx.save();
+      ctx.rotate(outerSpread);
+      drawTulipPetalShape(
+        pw * 0.96,
+        ph * 0.96,
+        0.35,
+        [
+          [0.00, '#ffd8ec'],
+          [0.32, '#f38bc2'],
+          [0.78, '#d4559a'],
+          [1.00, '#a33070']
+        ],
+        0.84,
+        s
+      );
+      ctx.restore();
+
+      // Pétalo exterior frontal central
+      drawTulipPetalShape(
+        pw * 0.92,
+        ph * 0.94,
+        0.28,
+        [
+          [0.00, '#ffe3f1'],
+          [0.20, '#f799cb'],
+          [0.66, '#e263a7'],
+          [1.00, '#b53a7c']
+        ],
+        0.90,
+        s
+      );
+
+      // --- 3 PÉTALOS INTERIORES (enmarcan la copa con bordes rosados luminosos) ---
+      const innerSpread = 0.08 + openness * 0.16;
+
+      // Pétalo interior trasero izquierdo
+      ctx.save();
+      ctx.rotate(-innerSpread);
+      ctx.translate(-pw * 0.08, -ph * 0.03);
+      drawTulipPetalShape(
+        pw * 0.78,
+        ph * 0.98,
+        0.42,
+        [
+          [0.00, '#ffe6f3'],
+          [0.30, '#e976b2'],
+          [0.78, '#b83d7f'],
+          [1.00, '#892259']
+        ],
+        0.86,
+        s
+      );
+      ctx.restore();
+
+      // Pétalo interior trasero derecho
+      ctx.save();
+      ctx.rotate(innerSpread);
+      ctx.translate(pw * 0.08, -ph * 0.03);
+      drawTulipPetalShape(
+        pw * 0.78,
+        ph * 0.98,
+        0.42,
+        [
+          [0.00, '#ffebf5'],
+          [0.30, '#ec7eb8'],
+          [0.78, '#c04488'],
+          [1.00, '#8f255e']
+        ],
+        0.90,
+        s
+      );
+      ctx.restore();
+
+      // Pétalo interior central superior (ligeramente más alto, define la silueta clásica del tulipán)
+      ctx.save();
+      ctx.translate(0, -ph * 0.04 * bloomEase);
+      drawTulipPetalShape(
+        pw * 0.76,
+        ph * 1.01,
+        0.48,
+        [
+          [0.00, '#fff0f7'],
+          [0.24, '#f592c7'],
+          [0.72, '#d8589e'],
+          [1.00, '#a83474']
+        ],
+        0.94,
+        s
+      );
+
+      // Venas longitudinales sutiles dentro de la copa
+      ctx.strokeStyle = 'rgba(176, 48, 118, 0.16)';
+      ctx.lineWidth = 0.75 * s;
+      for (let v = -2; v <= 2; v++) {
+        ctx.beginPath();
+        ctx.moveTo(v * pw * 0.035, 0);
+        ctx.quadraticCurveTo(v * pw * 0.07, -ph * 0.45, v * pw * 0.04, -ph * 0.85);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // Gotas de rocío brillantes cuando la flor ya está avanzada en su crecimiento
+      if (bloomEase > 0.65) {
+        const dewAlpha = Math.min(1, (bloomEase - 0.65) / 0.35) * (0.55 + 0.45 * currentAmbientState.rimAlpha);
+        for (let d = 0; d < tulip.dewDrops.length; d++) {
+          const drop = tulip.dewDrops[d];
+          const dx = drop.rx * pw;
+          const dy = -ph * 0.48 + drop.ry * ph;
+          const dr = drop.r * s;
+
+          ctx.fillStyle = `rgba(130, 32, 86, ${(0.35 * dewAlpha).toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(dx, dy + dr * 0.35, dr, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = `rgba(255, 245, 250, ${(0.85 * dewAlpha).toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(dx - dr * 0.25, dy - dr * 0.2, dr * 0.65, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      ctx.restore();
+    }
+
+    /**
+     * Actualiza y dibuja los destellos dorados o lunares flotando a contraluz
+     */
+    function drawSunlitSparkles(dt, px, py) {
+      const st = currentAmbientState;
+      for (let i = sparkles.length - 1; i >= 0; i--) {
+        const sp = sparkles[i];
+        sp.life += dt;
+        sp.x += sp.vx * dt + Math.sin(elapsedTime * 1.8 + sp.phase) * 8 * dt;
+        sp.y += sp.vy * dt;
+
+        if (sp.life >= sp.maxLife || sp.x > width + 30 || sp.y < -30) {
+          sparkles[i] = createSparkle(false);
+          continue;
+        }
+
+        const fade = Math.sin((sp.life / sp.maxLife) * Math.PI);
+        const alpha = sp.alpha * fade;
+        const sx = sp.x + px * 0.85;
+        const sy = sp.y + py * 0.85;
+
+        const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, sp.r * 3.2);
+        glow.addColorStop(0.0, rgbaStr(st.pollenCore, alpha));
+        glow.addColorStop(0.45, rgbaStr(st.pollenGlow, alpha * 0.55));
+        glow.addColorStop(1.0, rgbaStr(st.pollenGlow, 0));
+
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(sx, sy, sp.r * 3.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    /**
+     * Dibuja un sutil baño atmosférico según la fase del ciclo
+     */
+    function drawAtmosphericSunWash(px, py) {
+      const st = currentAmbientState;
+      const sunX = width * st.sunPos[0] + px * 0.25;
+      const sunY = height * st.sunPos[1] + py * 0.25;
+
+      const wash = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, Math.max(width, height) * 0.54);
+      wash.addColorStop(0.00, rgbaStr(st.washColor, st.washAlpha));
+      wash.addColorStop(0.28, rgbaStr(st.washColor, st.washAlpha * 0.42));
+      wash.addColorStop(0.65, rgbaStr(st.washColor, st.washAlpha * 0.10));
+      wash.addColorStop(1.00, rgbaStr(st.washColor, 0));
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = wash;
+      ctx.fillRect(0, 0, width, height);
+      ctx.restore();
+    }
+
+    /**
+     * Bucle principal de animación
+     */
+    function animate(timestamp) {
+      if (!lastTime) lastTime = timestamp;
+      const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+      lastTime = timestamp;
+      elapsedTime += dt;
+      growthClock += dt;
+
+      updateAmbientCycle();
+      renderOpenFieldBackground(70);
+
+      for (let i = 0; i < tulips.length; i++) {
+        const t = tulips[i];
+        const rawT = (growthClock - t.delay) / t.duration;
+        t.growth = easeOutQuart(rawT);
+      }
+      for (let i = 0; i < leaves.length; i++) {
+        const l = leaves[i];
+        const rawL = (growthClock - l.delay) / l.duration;
+        l.growth = easeOutCubic(rawL);
+      }
+
+      // Actualizar ráfagas de viento activas
+      for (let i = windGusts.length - 1; i >= 0; i--) {
+        windGusts[i].age += dt;
+        if (windGusts[i].age >= windGusts[i].maxAge) {
+          windGusts.splice(i, 1);
+        }
+      }
+
+      // Interpolación suave de paralaje
+      pointer.x += (pointer.targetX - pointer.x) * 0.06;
+      pointer.y += (pointer.targetY - pointer.y) * 0.06;
+
+      const px = (pointer.x - 0.5) * -28;
+      const py = (pointer.y - 0.5) * -18;
+      const pad = 70;
+
+      if (overlayMode) {
+        if (currentSeasonPhase !== targetSeasonPhase) {
+          currentSeasonPhase = targetSeasonPhase;
+          currentSeasonBlend = 0;
+        }
+        currentSeasonBlend += (targetSeasonBlend - currentSeasonBlend) * Math.min(1, dt * 4);
+        updateSeasonalGarden();
+      }
+
+      ctx.clearRect(0, 0, width, height);
+
+      if (!overlayMode) {
+        ctx.drawImage(bgLayer, -pad + px * 0.25, -pad + py * 0.25, width + pad * 2, height + pad * 2);
+        drawOpenFieldGround(px, py);
+      }
+
+      // 3. Hojas lanceoladas traseras y medias
+      for (let i = 0; i < leaves.length; i++) {
+        if (leaves[i].depth <= 0.72) {
+          drawTulipLeaf(leaves[i], px, py);
+        }
+      }
+
+      // 4. Campo de tulipanes rosados ordenados de atrás hacia adelante
+      for (let i = 0; i < tulips.length; i++) {
+        drawTulip(tulips[i], px, py);
+      }
+
+      // 5. Hojas envolventes del primer plano
+      for (let i = 0; i < leaves.length; i++) {
+        if (leaves[i].depth > 0.72) {
+          drawTulipLeaf(leaves[i], px, py);
+        }
+      }
+
+      // 6. Polen luminoso flotando y baño cálido solar
+      drawSunlitSparkles(dt, px, py);
+      if (!overlayMode) drawAtmosphericSunWash(px, py);
+
+      requestAnimationFrame(animate);
+    }
+
+    /**
+     * Genera una ráfaga de brisa y destellos dorados en las coordenadas dadas
+     */
+    function triggerBreeze(x, y) {
+      windGusts.push({
+        x,
+        y,
+        age: 0,
+        maxAge: 2.4
+      });
+
+      for (let i = 0; i < 10; i++) {
+        if (sparkles.length < 75) {
+          sparkles.push(createSparkle(false, x, y));
+        } else {
+          sparkles[i % sparkles.length] = createSparkle(false, x, y);
+        }
+      }
+    }
+
+    // Eventos de ratón y toque para paralaje
+    window.addEventListener('mousemove', (e) => {
+      pointer.targetX = e.clientX / width;
+      pointer.targetY = e.clientY / height;
+    });
+
+    window.addEventListener('touchmove', (e) => {
+      if (e.touches.length > 0) {
+        pointer.targetX = e.touches[0].clientX / width;
+        pointer.targetY = e.touches[0].clientY / height;
+      }
+    }, { passive: true });
+
+    // Interacción al hacer clic o tocar el campo
+    canvas.addEventListener('pointerdown', (e) => {
+      triggerBreeze(e.clientX, e.clientY);
+      if (overlayMode && window.parent !== window) {
+        window.parent.postMessage({ type: 'field-pointer', x: e.clientX / width, y: e.clientY / height }, '*');
+        let nearestTulip = null;
+        let nearestDistance = Infinity;
+        for (const tulip of tulips) {
+          const distance = Math.hypot(e.clientX - tulip.headX, e.clientY - tulip.headY);
+          if (distance < nearestDistance) {
+            nearestDistance = distance;
+            nearestTulip = tulip;
+          }
+        }
+        const touchRadius = Math.max(46, Math.min(width, height) * 0.105);
+        if (nearestTulip && nearestDistance <= touchRadius) {
+          window.parent.postMessage({ type: 'field-tulip', index: nearestTulip.id % 6 }, '*');
+        }
+      }
+    });
+
+    window.addEventListener('message', (event) => {
+      if (event.source !== window.parent || event.data?.type !== 'field-cycle' || !overlayMode) return;
+      if (Number.isInteger(event.data.seasonPhase)) targetSeasonPhase = Math.min(2, Math.max(0, event.data.seasonPhase));
+      if (Number.isFinite(event.data.seasonBlend)) targetSeasonBlend = Math.min(1, Math.max(0, event.data.seasonBlend));
+    });
+
+    // Botones discretos de control
+    const breezeBtn = document.getElementById('breezeBtn');
+    const regrowBtn = document.getElementById('regrowBtn');
+    const hideHudBtn = document.getElementById('hideHudBtn');
+    const showHudBtn = document.getElementById('showHudBtn');
+    const hud = document.getElementById('hud');
+    const phaseBadge = document.getElementById('phaseBadge');
+    breezeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      triggerBreeze(width * (0.3 + Math.random() * 0.4), height * (0.35 + Math.random() * 0.25));
+    });
+
+    regrowBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      restartGrowth();
+    });
+
+    hideHudBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      hud.classList.add('hidden');
+      showHudBtn.classList.remove('hidden');
+    });
+
+    showHudBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showHudBtn.classList.add('hidden');
+      hud.classList.remove('hidden');
+    });
+
+    window.addEventListener('resize', resizeScene);
+
+    // Iniciar escena al cargar la ventana
+    window.onload = function () {
+      elapsedTime = 0;
+      bgDirty = true;
+      updateAmbientCycle();
+      resizeScene();
+      restartGrowth();
+      requestAnimationFrame(animate);
+    };
+  </script>
+</body>
+</html>
